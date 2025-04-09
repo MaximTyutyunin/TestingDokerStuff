@@ -31,6 +31,7 @@ def get_news_db():
                         news_management.comments on news.id = comments.news_id
                         group by  news.title, news.date, body """)
     data = cursor.fetchall()
+    cursor.close()
     connection.close()
 
     result = []
@@ -53,12 +54,66 @@ def get_news_by_id(searched_id):
     request = f'SELECT * FROM news where id = {searched_id};'
     cursor.execute(request)
     data = cursor.fetchall()
+    cursor.close()
     connection.close()
 
     if not data:  # If data is empty, return an error
         return {"error": "News not found"}, 404
 
     return {"news": data}
+
+
+@app.route("/api/news", methods=["POST"])
+def post_news():
+    # Get new article data from request
+    new_article = request.get_json()
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute(f"""insert into news_management.news ( title, date, body, deleted)
+    values
+    ( '{new_article["title"]}', '{datetime.now().isoformat()}', '{new_article["body"]}', 0)
+    """)
+    raw_id = cursor.lastrowid
+    print(raw_id)
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    # Add comments if they exist
+    # if "comments" in new_article:
+    #     comments["comments"].extend(new_article["comments"])
+    #     new_article.pop("comments")  # Remove comments from article
+    #
+    # # Set article metadata
+    # new_article["date"] = datetime.now().isoformat()
+    # new_article["deleted"] = False
+
+    return {"message": "All good"}, 200
+
+
+@app.route("/api/news/<int:searched_id>", methods=[
+    "DELETE"])  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
+def delete_news_by_id(searched_id):
+    # new_article = request.get_json() this line of code makes the endpoint to expect some json body which will break
+    # the app because its the delete method doesnt require json object to be sent --> no one will sent it --. error 415
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute(f"""SELECT * FROM news where id = {searched_id};""")
+    data = cursor.fetchall()
+    if not data:  # If data is empty, return an error
+        return {"error": "News article doesnt exist"}, 404
+
+    cursor.execute(f"""UPDATE  news_management.news 
+                        SET deleted = 1
+                        WHERE id = {searched_id};""")
+    raw_id = cursor.lastrowid
+    print(raw_id)
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return {"message": "Article successfully deleted"}, 200
 
 
 #

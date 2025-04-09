@@ -51,16 +51,33 @@ def get_news_db():
 def get_news_by_id(searched_id):
     connection = get_db_connection()
     cursor = connection.cursor()
-    request = f'SELECT * FROM news where id = {searched_id};'
-    cursor.execute(request)
-    data = cursor.fetchall()
-    cursor.close()
-    connection.close()
+    try:
+        query = """SELECT news.title, news.date, news.body,
+                      JSON_ARRAYAGG(JSON_OBJECT('comment', comments.comment, 'title', comments.title))
+               FROM news
+               LEFT JOIN comments ON news.id = comments.news_id
+               WHERE news.id = %s
+               GROUP BY news.title, news.date, news.body;
+        """
+        cursor.execute(query, (searched_id,))
+        data = cursor.fetchall()
 
-    if not data:  # If data is empty, return an error
-        return {"error": "News not found"}, 404
 
-    return {"news": data}
+        if not data:  # If data is empty, return an error
+            return {"error": "News not found"}, 404
+
+        news_article = data[0]
+        result = {
+            "title": news_article[0],
+            "date": news_article[1],
+            "body": news_article[2],
+            "comments": json.loads(news_article[3])
+        }
+        return {"news": result}
+    finally:
+        cursor.close()
+        connection.close()
+
 
 
 @app.route("/api/news", methods=["POST"])

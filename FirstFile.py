@@ -62,7 +62,6 @@ def get_news_by_id(searched_id):
         cursor.execute(query, (searched_id,))
         data = cursor.fetchall()
 
-
         if not data:  # If data is empty, return an error
             return {"error": "News not found"}, 404
 
@@ -79,34 +78,35 @@ def get_news_by_id(searched_id):
         connection.close()
 
 
-
 @app.route("/api/news", methods=["POST"])
 def post_news():
     # Get new article data from request
     new_article = request.get_json()
-
     connection = get_db_connection()
     cursor = connection.cursor()
-    cursor.execute(f"""insert into news_management.news ( title, date, body, deleted)
-    values
-    ( '{new_article["title"]}', '{datetime.now().isoformat()}', '{new_article["body"]}', 0)
-    """)
-    raw_id = cursor.lastrowid
-    print(raw_id)
-    connection.commit()
-    cursor.close()
-    connection.close()
+    news_id = None
+    try:
+        cursor.execute("""
+            INSERT INTO news (title, date, body, deleted)
+            VALUES (%s, %s, %s, %s)
+        """, (new_article["title"], datetime.now().isoformat(), new_article["body"], 0))
 
-    # Add comments if they exist
-    # if "comments" in new_article:
-    #     comments["comments"].extend(new_article["comments"])
-    #     new_article.pop("comments")  # Remove comments from article
-    #
-    # # Set article metadata
-    # new_article["date"] = datetime.now().isoformat()
-    # new_article["deleted"] = False
+        news_id = cursor.lastrowid
+        if "comments" in new_article:
+            for comment in new_article["comments"]:
+                cursor.execute("""
+                   insert into comments (news_id, title, date, comment)
+                    values (%s, %s, %s, %s)
+                """, (news_id, comment["title"], comment["date"], comment["comment"]))
+        connection.commit()
+        return {"message": "Article created", "news_id": news_id}, 201
+    except Exception as e:
+        connection.rollback()
+        return {"error": str(e)}, 500
+    finally:
+        cursor.close()
+        connection.close()
 
-    return {"message": "All good"}, 200
 
 
 @app.route("/api/news/<int:searched_id>", methods=[

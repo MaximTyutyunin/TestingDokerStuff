@@ -16,38 +16,46 @@ db_config = {
 
 
 def get_db_connection():
-    conn = mysql.connector.connect(**db_config)
-    print(conn.is_connected())
-    return conn
+    try:
+        conn = mysql.connector.connect(**db_config)
+        print("DB connected:", conn.is_connected())
+        return conn
+    except mysql.connector.Error as e:
+        print("Database connection failed:", e)
+        raise  # Let your route handle the error
 
 
 @app.route("/api")
 def get_news_db():
     connection = get_db_connection()
     cursor = connection.cursor()
-    cursor.execute("""select  news.title, news.date, body, JSON_ARRAYAGG(JSON_OBJECT('comment', comments.comment, 'title', comments.title))
-                        from news_management.news
-                        left join
-                        news_management.comments on news.id = comments.news_id
-                        group by  news.title, news.date, body """)
-    data = cursor.fetchall()
-    cursor.close()
-    connection.close()
+    try:
+        cursor.execute("""select  news.title, news.date, body, JSON_ARRAYAGG(JSON_OBJECT('comment', comments.comment, 'title', comments.title))
+                            from news_management.news
+                            left join
+                            news_management.comments on news.id = comments.news_id
+                            group by  news.title, news.date, body """)
+        data = cursor.fetchall()
 
-    result = []
-    for news_article in data:
-        result.append({
-            "title": news_article[0], "date": news_article[1], "body": news_article[2],
-            "comments": json.loads(news_article[3])
-        })
-    return {
-        "news": result,
-        # "news_count": len(new_list)
-    }
+        result = []
+        for news_article in data:
+            result.append({
+                "title": news_article[0], "date": news_article[1], "body": news_article[2],
+                "comments": json.loads(news_article[3])
+            })
+        return {
+            "news": result,
+            # "news_count": len(new_list)
+        }
+    except Exception as e:
+        connection.rollback()
+        return {"error": str(e)}, 500
+    finally:
+        cursor.close()
+        connection.close()
 
 
-@app.route(
-    "/api/news/<int:searched_id>")  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
+@app.route("/api/news/<int:searched_id>")  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
 def get_news_by_id(searched_id):
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -73,6 +81,9 @@ def get_news_by_id(searched_id):
             "comments": json.loads(news_article[3])
         }
         return {"news": result}
+    except Exception as e:
+        connection.rollback()
+        return {"error": str(e)}, 500
     finally:
         cursor.close()
         connection.close()
@@ -108,29 +119,34 @@ def post_news():
         connection.close()
 
 
-
 @app.route("/api/news/<int:searched_id>", methods=[
     "DELETE"])  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
 def delete_news_by_id(searched_id):
     # new_article = request.get_json() this line of code makes the endpoint to expect some json body which will break
-    # the app because its the delete method doesnt require json object to be sent --> no one will sent it --. error 415
+    # the app because it's the delete method doesnt require json object to be sent --> no one will sent it --. error 415
 
     connection = get_db_connection()
     cursor = connection.cursor()
-    cursor.execute(f"""SELECT * FROM news where id = {searched_id};""")
-    data = cursor.fetchall()
-    if not data:  # If data is empty, return an error
-        return {"error": "News article doesnt exist"}, 404
+    try:
+        cursor.execute("SELECT * FROM news WHERE id = %s", (searched_id,))
+        data = cursor.fetchall()
 
-    cursor.execute(f"""UPDATE  news_management.news 
-                        SET deleted = 1
-                        WHERE id = {searched_id};""")
-    raw_id = cursor.lastrowid
-    print(raw_id)
-    connection.commit()
-    cursor.close()
-    connection.close()
-    return {"message": "Article successfully deleted"}, 200
+        if not data:  # If data is empty, return an error
+            return {"error": "News article doesnt exist"}, 404
+
+        cursor.execute(f"""UPDATE  news_management.news 
+                            SET deleted = 1
+                            WHERE id = %s;""",(searched_id,))
+
+        connection.commit()
+        return {"message": "Article successfully deleted"}, 200
+    except Exception as e:
+        connection.rollback()
+        return {"error": str(e)}, 500
+    finally:
+        cursor.close()
+        connection.close()
+
 
 
 #

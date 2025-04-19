@@ -98,8 +98,8 @@ def post_news():
     news_id = None
     try:
         cursor.execute("""
-            INSERT INTO news (title, date, body, deleted)
-            VALUES (%s, %s, %s, %s)
+            insert into news (title, date, body, deleted)
+            values (%s, %s, %s, %s)
         """, (new_article["title"], datetime.now().isoformat(), new_article["body"], 0))
 
         news_id = cursor.lastrowid
@@ -111,6 +111,28 @@ def post_news():
                 """, (news_id, comment["title"], comment["date"], comment["comment"]))
         connection.commit()
         return {"message": "Article created", "news_id": news_id}, 201
+    except Exception as e:
+        connection.rollback()
+        return {"error": str(e)}, 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.route("/api/news/<int:searched_id>", methods=["PUT"])
+def put_news(searched_id):
+    updated_article = request.get_json()
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute("select * from news where id = %s", (searched_id,))
+        if not cursor.fetchone():
+            return {"error": "Article not found"}, 404
+
+        cursor.execute("""
+                   UPDATE news
+                   SET title = %s, body = %s, date = %s
+                   WHERE id = %s
+               """, (updated_article["title"], updated_article["body"], datetime.now().isoformat(), searched_id))
     except Exception as e:
         connection.rollback()
         return {"error": str(e)}, 500

@@ -119,8 +119,7 @@ def post_news():
         connection.close()
 
 
-@app.route("/api/news/<int:searched_id>", methods=[
-    "DELETE"])  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
+@app.route("/api/news/<int:searched_id>", methods=["DELETE"])  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
 def delete_news_by_id(searched_id):
     # new_article = request.get_json() this line of code makes the endpoint to expect some json body which will break
     # the app because it's the delete method doesnt require json object to be sent --> no one will sent it --. error 415

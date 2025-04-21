@@ -24,16 +24,22 @@ def get_db_connection():
         print("Database connection failed:", e)
         raise  # Let your route handle the error
 
-
 @app.route("/api")
 def get_news_db():
+    """
+    get news with according comments, each news article is sorted by title and date
+        - no json required
+        - Returns 500 if the article with the given ID doesn't exist.
+        - Returns 200 on success.
+    """
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        cursor.execute("""select  news.title, news.date, body, JSON_ARRAYAGG(JSON_OBJECT('comment', comments.comment, 'title', comments.title))
+        cursor.execute("""select  news.title, news.date, body, 
+                                JSON_ARRAYAGG(JSON_OBJECT('comment', comments.comment, 'title', comments.title))
                             from news_management.news
-                            left join
-                            news_management.comments on news.id = comments.news_id
+                            left join news_management.comments on news.id = comments.news_id
+                            where news.deleted = 0
                             group by  news.title, news.date, body """)
         data = cursor.fetchall()
 
@@ -54,9 +60,14 @@ def get_news_db():
         cursor.close()
         connection.close()
 
-
 @app.route("/api/news/<int:searched_id>")  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
 def get_news_by_id(searched_id):
+    """
+    get a specific article with ID and sort all its comments by date
+        - no json required
+        - Returns 500 if the article with the given ID doesn't exist.
+        - Returns news article to user on success.
+    """
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
@@ -88,9 +99,12 @@ def get_news_by_id(searched_id):
         cursor.close()
         connection.close()
 
-
 @app.route("/api/news", methods=["POST"])
 def post_news():
+    """
+    insert new item into the DB , comments go into comments table and news go into the news table
+        - Returns 201 when Article created.
+    """
     # Get new article data from request
     new_article = request.get_json()
     connection = get_db_connection()
@@ -120,6 +134,12 @@ def post_news():
 
 @app.route("/api/news/<int:searched_id>", methods=["PUT"])
 def put_news(searched_id):
+    """
+    update an item in the DB
+     - requires json body
+     - Returns 404 if the article with the given ID doesn't exist.
+     - Returns 200 on success.
+    """
     updated_article = request.get_json()
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -133,6 +153,8 @@ def put_news(searched_id):
                    SET title = %s, body = %s, date = %s
                    WHERE id = %s
                """, (updated_article["title"], updated_article["body"], datetime.now().isoformat(), searched_id))
+
+        return {"message": "Article successfully updated"}, 200
     except Exception as e:
         connection.rollback()
         return {"error": str(e)}, 500
@@ -141,11 +163,18 @@ def put_news(searched_id):
         connection.close()
 
 
+
 @app.route("/api/news/<int:searched_id>", methods=["DELETE"])  # <id> is only for flask, flask parses data inside @app.route("/api/news/<id>") and fetches "id"
 def delete_news_by_id(searched_id):
     # new_article = request.get_json() this line of code makes the endpoint to expect some json body which will break
     # the app because it's the delete method doesnt require json object to be sent --> no one will sent it --. error 415
-
+    """
+    Marks a news article as deleted in the database (soft delete).
+    - Does not remove the row from the table.
+    - Returns 404 if the article with the given ID doesn't exist.
+    - Returns 200 on success.
+    - No JSON body is expected for DELETE requests.
+    """
     connection = get_db_connection()
     cursor = connection.cursor()
     try:

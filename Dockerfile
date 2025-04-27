@@ -5,6 +5,7 @@ COPY news.json /
 COPY FirstFile.py /
 
 RUN pip install Flask==3.1.0
+RUN pip install mysql-connector-python==9.2.0
 
 EXPOSE 8080
 
